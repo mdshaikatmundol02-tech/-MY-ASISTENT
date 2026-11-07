@@ -831,7 +831,7 @@ export const AndroidDeviceInspector: React.FC<AndroidDeviceInspectorProps> = ({
                       </span>
                     </h3>
                     <p className="text-xs text-slate-300 mt-0.5 font-mono">
-                      Repo: <span className="text-indigo-300 font-semibold">{apkPublishState?.repo || 'mdshaikatmondol02-tech/SOHA'}</span> • Workflow: <span className="text-slate-200">build-apk.yml</span>
+                      Repo: <span className="text-indigo-300 font-semibold">{apkPublishState?.repo || 'mdshaikatmondol02-tech/-MY-ASISTENT'}</span> • Workflow: <span className="text-slate-200">build-apk.yml</span>
                     </p>
                   </div>
                 </div>
@@ -840,7 +840,7 @@ export const AndroidDeviceInspector: React.FC<AndroidDeviceInspectorProps> = ({
                   <button
                     onClick={() =>
                       onTriggerAction('publish_github_apk', {
-                        repo: 'mdshaikatmondol02-tech/SOHA',
+                        repo: apkPublishState?.repo || 'mdshaikatmondol02-tech/-MY-ASISTENT',
                       })
                     }
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95"
@@ -850,7 +850,7 @@ export const AndroidDeviceInspector: React.FC<AndroidDeviceInspectorProps> = ({
                   </button>
 
                   <a
-                    href="https://github.com/mdshaikatmondol02-tech/SOHA/releases"
+                    href={`https://github.com/${apkPublishState?.repo || 'mdshaikatmondol02-tech/-MY-ASISTENT'}/releases`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
@@ -860,7 +860,7 @@ export const AndroidDeviceInspector: React.FC<AndroidDeviceInspectorProps> = ({
                   </a>
 
                   <a
-                    href="https://github.com/mdshaikatmondol02-tech/SOHA/actions"
+                    href={`https://github.com/${apkPublishState?.repo || 'mdshaikatmondol02-tech/-MY-ASISTENT'}/actions`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-slate-800 flex items-center gap-1 transition-colors"

@@ -335,12 +335,12 @@ export const initialAndroidDeviceState: AndroidDeviceState = {
   apkPublishState: {
     isPublishing: false,
     status: 'idle',
-    repo: 'mdshaikatmondol02-tech/SOHA',
+    repo: 'mdshaikatmondol02-tech/-MY-ASISTENT',
     branch: 'main',
     workflowName: 'Build & Release Debug APK',
-    workflowUrl: 'https://github.com/mdshaikatmondol02-tech/SOHA/actions',
-    releaseUrl: 'https://github.com/mdshaikatmondol02-tech/SOHA/releases',
-    apkDownloadUrl: 'https://github.com/mdshaikatmondol02-tech/SOHA/releases/latest',
+    workflowUrl: 'https://github.com/mdshaikatmondol02-tech/-MY-ASISTENT/actions',
+    releaseUrl: 'https://github.com/mdshaikatmondol02-tech/-MY-ASISTENT/releases',
+    apkDownloadUrl: 'https://github.com/mdshaikatmondol02-tech/-MY-ASISTENT/releases/latest',
     version: '1.0.0-debug',
     message: 'Ready to build and publish app-debug.apk to GitHub',
   },
@@ -821,7 +821,7 @@ export function executeDeviceAction(
     }
 
     case 'publish_github_apk': {
-      const targetRepo = String(params.repo || stateClone.apkPublishState?.repo || 'mdshaikatmondol02-tech/SOHA');
+      const targetRepo = String(params.repo || stateClone.apkPublishState?.repo || 'mdshaikatmondol02-tech/-MY-ASISTENT');
       const nowStr = new Date().toLocaleTimeString();
 
       stateClone.apkPublishState = {
