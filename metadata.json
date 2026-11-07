@@ -1,0 +1,9 @@
+{
+  "name": "Aura Live - Gemini Voice & Android Device Assistant",
+  "description": "Real-time bidirectional audio-to-audio voice assistant powered by Gemini Live API, Web Audio API, and native Android bridge integration.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

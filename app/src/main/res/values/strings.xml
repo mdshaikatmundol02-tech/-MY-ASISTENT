@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">SOHA Voice Assistant</string>
+    <string name="notification_channel_name">SOHA Assistant</string>
+    <string name="notification_channel_desc">Notifications from SOHA Voice Assistant</string>
+</resources>

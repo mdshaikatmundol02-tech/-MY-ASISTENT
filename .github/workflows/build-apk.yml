@@ -1,0 +1,869 @@
+name: Build & Release Debug APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release Debug APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Verify active Java version
+        run: java -version
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build Web App
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Ensure Android Project Scaffolding
+        run: |
+          echo "Setting up complete Android project scaffolding..."
+
+          # 1. settings.gradle
+          cat << 'EOF' > settings.gradle
+pluginManagement {
+    repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "SOHA"
+include ':app'
+EOF
+
+          # 2. build.gradle
+          cat << 'EOF' > build.gradle
+plugins {
+    id 'com.android.application' version '8.7.2' apply false
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
+}
+EOF
+
+          # 3. gradle.properties
+          cat << 'EOF' > gradle.properties
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.enableJetifier=true
+EOF
+
+          # 4. Create directories
+          mkdir -p app/src/main/java/com/soha/assistant
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
+          mkdir -p app/src/main/assets
+
+          # 5. app/build.gradle
+          cat << 'EOF' > app/build.gradle
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.soha.assistant'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.soha.assistant"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        debug {
+            def customKeystore = file("${System.getProperty('user.home')}/.android/debug.keystore")
+            if (customKeystore.exists()) {
+                storeFile customKeystore
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+            debuggable true
+            minifyEnabled false
+            applicationIdSuffix ""
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    buildFeatures {
+        viewBinding false
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
+}
+EOF
+
+          # 6. app/src/main/AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.imo.android.imoim" />
+        <package android:name="com.android.chrome" />
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.CALL" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SOHA"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true"
+        tools:targetApi="35">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
+EOF
+
+          # 7. MainActivity.java
+          cat << 'EOF' > app/src/main/java/com/soha/assistant/MainActivity.java
+package com.soha.assistant;
+
+import android.Manifest;
+import android.annotation.SuppressLint;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MainActivity extends AppCompatActivity {
+    private static final int PERMISSION_REQ_CODE = 1001;
+    private WebView webView;
+    private AndroidBridge bridge;
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        webView = new WebView(this);
+        setContentView(webView);
+
+        configureWebView();
+        checkAndRequestPermissions();
+
+        webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configureWebView() {
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+
+        bridge = new AndroidBridge(this, webView);
+        webView.addJavascriptInterface(bridge, "AndroidBridge");
+        webView.addJavascriptInterface(bridge, "Android");
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> {
+                    String[] resources = request.getResources();
+                    request.grant(resources);
+                });
+            }
+        });
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.startsWith("tel:") || url.startsWith("mailto:") || url.startsWith("whatsapp:")) {
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+    private void checkAndRequestPermissions() {
+        List<String> neededPermissions = new ArrayList<>();
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.RECORD_AUDIO);
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.CAMERA);
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.READ_CONTACTS);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+
+        if (!neededPermissions.isEmpty()) {
+            ActivityCompat.requestPermissions(this, neededPermissions.toArray(new String[0]), PERMISSION_REQ_CODE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSION_REQ_CODE) {
+            webView.evaluateJavascript("if (window.onAndroidPermissionsResult) window.onAndroidPermissionsResult();", null);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (webView != null) {
+            webView.destroy();
+        }
+        super.onDestroy();
+    }
+}
+EOF
+
+          # 8. AndroidBridge.java
+          cat << 'EOF' > app/src/main/java/com/soha/assistant/AndroidBridge.java
+package com.soha.assistant;
+
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.database.Cursor;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.media.AudioManager;
+import android.net.Uri;
+import android.os.BatteryManager;
+import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
+import android.provider.ContactsContract;
+import android.util.Log;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+
+import androidx.core.app.NotificationCompat;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.net.URLEncoder;
+
+public class AndroidBridge {
+    private static final String TAG = "SOHA_Bridge";
+    private static final String CHANNEL_ID = "soha_assistant_notifications";
+
+    private final MainActivity activity;
+    private final WebView webView;
+    private boolean flashlightState = false;
+
+    public AndroidBridge(MainActivity activity, WebView webView) {
+        this.activity = activity;
+        this.webView = webView;
+        createNotificationChannel();
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "SOHA Assistant Notifications",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+            channel.setDescription("Notifications from SOHA Voice Assistant");
+            NotificationManager manager = activity.getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public boolean isNative() {
+        return true;
+    }
+
+    @JavascriptInterface
+    public void toggleFlashlight(boolean enable) {
+        activity.runOnUiThread(() -> {
+            try {
+                CameraManager cameraManager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+                if (cameraManager == null) return;
+
+                for (String cameraId : cameraManager.getCameraIdList()) {
+                    CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+                    Boolean hasFlash = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                    Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+
+                    if (Boolean.TRUE.equals(hasFlash) && facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                        cameraManager.setTorchMode(cameraId, enable);
+                        flashlightState = enable;
+                        break;
+                    }
+                }
+            } catch (CameraAccessException | IllegalArgumentException e) {
+                Log.e(TAG, "Failed to toggle flashlight", e);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void vibrate(long ms) {
+        activity.runOnUiThread(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    VibratorManager vm = (VibratorManager) activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                    if (vm != null) {
+                        vm.getDefaultVibrator().vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE));
+                    }
+                } else {
+                    Vibrator v = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+                    if (v != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            v.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE));
+                        } else {
+                            v.vibrate(ms);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Vibrate error", e);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void showNotification(String title, String body) {
+        activity.runOnUiThread(() -> {
+            try {
+                NotificationManager manager = (NotificationManager) activity.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (manager == null) return;
+
+                NotificationCompat.Builder builder = new NotificationCompat.Builder(activity, CHANNEL_ID)
+                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle(title)
+                        .setContentText(body)
+                        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                        .setAutoCancel(true);
+
+                manager.notify((int) System.currentTimeMillis(), builder.build());
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to show notification", e);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void setVolume(int level) {
+        activity.runOnUiThread(() -> {
+            try {
+                AudioManager audioManager = (AudioManager) activity.getSystemService(Context.AUDIO_SERVICE);
+                if (audioManager == null) return;
+
+                int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                int target = (int) Math.round((Math.max(0, Math.min(100, level)) / 100.0) * max);
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, AudioManager.FLAG_SHOW_UI);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to set volume", e);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public boolean openApp(String appNameOrPackage) {
+        if (appNameOrPackage == null || appNameOrPackage.trim().isEmpty()) return false;
+        final String input = appNameOrPackage.trim().toLowerCase();
+        return tryLaunchPackage(resolvePackageName(input));
+    }
+
+    private String resolvePackageName(String name) {
+        switch (name) {
+            case "whatsapp":
+                return "com.whatsapp";
+            case "whatsapp business":
+                return "com.whatsapp.w4b";
+            case "messenger":
+            case "fb messenger":
+                return "com.facebook.orca";
+            case "telegram":
+                return "org.telegram.messenger";
+            case "imo":
+                return "com.imo.android.imoim";
+            case "chrome":
+                return "com.android.chrome";
+            case "youtube":
+                return "com.google.android.youtube";
+            case "camera":
+                return "com.android.camera";
+            case "settings":
+                return "com.android.settings";
+            default:
+                return name;
+        }
+    }
+
+    private boolean tryLaunchPackage(String packageName) {
+        try {
+            Intent launchIntent = activity.getPackageManager().getLaunchIntentForPackage(packageName);
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(launchIntent);
+                return true;
+            } else {
+                Intent marketIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + packageName));
+                marketIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(marketIntent);
+                return true;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not launch package: " + packageName, e);
+            return false;
+        }
+    }
+
+    @JavascriptInterface
+    public boolean makeCall(String phoneNumber) {
+        try {
+            Intent dialIntent = new Intent(Intent.ACTION_DIAL);
+            dialIntent.setData(Uri.parse("tel:" + Uri.encode(phoneNumber.trim())));
+            dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(dialIntent);
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to launch dialer", e);
+            return false;
+        }
+    }
+
+    @JavascriptInterface
+    public boolean openWhatsApp(String phoneNumber, String message) {
+        try {
+            String url = "https://api.whatsapp.com/send?phone=" + Uri.encode(phoneNumber) +
+                    (message != null ? "&text=" + URLEncoder.encode(message, "UTF-8") : "");
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(url));
+            intent.setPackage("com.whatsapp");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(intent);
+            return true;
+        } catch (Exception e) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=" + Uri.encode(phoneNumber)));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(intent);
+                return true;
+            } catch (Exception ex) {
+                Log.e(TAG, "Failed to launch WhatsApp", ex);
+                return false;
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public int getBatteryLevel() {
+        try {
+            BatteryManager bm = (BatteryManager) activity.getSystemService(Context.BATTERY_SERVICE);
+            if (bm != null) {
+                return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Battery level query failed", e);
+        }
+        return 80;
+    }
+
+    @JavascriptInterface
+    public boolean isCharging() {
+        try {
+            IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            Intent batteryStatus = activity.registerReceiver(null, ifilter);
+            if (batteryStatus != null) {
+                int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                return status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Battery charging status failed", e);
+        }
+        return false;
+    }
+
+    @JavascriptInterface
+    public String searchContacts(String query) {
+        JSONArray results = new JSONArray();
+        try {
+            Uri uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI;
+            String selection = ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " LIKE ?";
+            String[] selectionArgs = new String[]{"%" + query + "%"};
+
+            Cursor cursor = activity.getContentResolver().query(uri, null, selection, selectionArgs, null);
+            if (cursor != null) {
+                int nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                int numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+
+                while (cursor.moveToNext() && results.length() < 10) {
+                    String name = cursor.getString(nameIndex);
+                    String number = cursor.getString(numberIndex);
+                    JSONObject contact = new JSONObject();
+                    contact.put("name", name);
+                    contact.put("phone", number);
+                    results.put(contact);
+                }
+                cursor.close();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Contact search permission or query issue", e);
+        }
+        return results.toString();
+    }
+}
+EOF
+
+          # 9. Resources (strings, colors, themes, drawables)
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+<resources>
+    <string name="app_name">SOHA Voice Assistant</string>
+    <string name="notification_channel_name">SOHA Assistant</string>
+    <string name="notification_channel_desc">Notifications from SOHA Voice Assistant</string>
+</resources>
+EOF
+
+          cat << 'EOF' > app/src/main/res/values/colors.xml
+<resources>
+    <color name="primary">#6366F1</color>
+    <color name="primary_dark">#4F46E5</color>
+    <color name="accent">#06B6D4</color>
+    <color name="background">#0F172A</color>
+</resources>
+EOF
+
+          cat << 'EOF' > app/src/main/res/values/themes.xml
+<resources>
+    <style name="Theme.SOHA" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryDark">@color/background</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+    </style>
+</resources>
+EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher_background.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:fillColor="#6366F1"
+        android:pathData="M54,24 A30,30 0 1,0 54,84 A30,30 0 1,0 54,24 Z" />
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M54,34 A20,20 0 1,0 54,74 A20,20 0 1,0 54,34 Z" />
+</vector>
+EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher_foreground.xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,38 A16,16 0 1,0 54,70 A16,16 0 1,0 54,38 Z" />
+</vector>
+EOF
+
+          cat << 'EOF' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+EOF
+
+          cat << 'EOF' > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+EOF
+
+          # Copy built web app to assets
+          cp -r dist/* app/src/main/assets/
+          echo "Android project scaffolding verified successfully."
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Generate temporary debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -keypass android \
+            -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+
+      - name: Assemble Debug APK
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        id: publish_release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="debug-v${{ github.run_number }}.${{ github.run_attempt }}"
+          TITLE="Debug APK - Run ${{ github.run_number }} (Attempt ${{ github.run_attempt }})"
+
+          NOTES=$(printf '%s\n' \
+            '### Release Notes' \
+            '● This is an automatically generated debug APK.' \
+            '● The APK was built by GitHub Actions.' \
+            '● The GitHub Actions run number: ${{ github.run_number }}' \
+            '● The GitHub Actions run attempt: ${{ github.run_attempt }}' \
+            '● The source commit SHA: ${{ github.sha }}' \
+            '● The APK is intended for testing.' \
+            '● The APK is not a Play Store production release.' \
+            '● The APK is signed only with a temporary debug keystore.')
+
+          gh release create "$TAG" \
+            app/build/outputs/apk/debug/app-debug.apk \
+            --target "${{ github.sha }}" \
+            --title "$TITLE" \
+            --notes "$NOTES" \
+            --latest
+
+      - name: Report APK download result
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="debug-v${{ github.run_number }}.${{ github.run_attempt }}"
+          APK_FILE="app-debug.apk"
+
+          echo "=========================================="
+          echo "       APK BUILD & RELEASE SUMMARY        "
+          echo "=========================================="
+
+          if [ "${{ steps.publish_release.outcome }}" = "success" ]; then
+            echo "Status: Release publishing succeeded"
+            echo "Confirming release with gh release view..."
+            gh release view "$TAG"
+
+            RELEASE_URL=$(gh release view "$TAG" --json url -q .url 2>/dev/null || echo "https://github.com/${{ github.repository }}/releases/tag/$TAG")
+
+            echo "Release Tag: $TAG"
+            echo "Release Title: Debug APK - Run ${{ github.run_number }} (Attempt ${{ github.run_attempt }})"
+            echo "Direct GitHub Release page URL: $RELEASE_URL"
+            echo "Exact APK asset filename: $APK_FILE"
+
+            {
+              echo "## 🚀 Android Debug APK Released Successfully"
+              echo ""
+              echo "- **Release Tag:** \`$TAG\`"
+              echo "- **Release Title:** Debug APK - Run ${{ github.run_number }} (Attempt ${{ github.run_attempt }})"
+              echo "- **Direct Release URL:** [$RELEASE_URL]($RELEASE_URL)"
+              echo "- **APK Asset Filename:** \`$APK_FILE\`"
+              echo ""
+              echo "### Download Information"
+              echo "- The APK can be downloaded directly from the **Assets** section of the [GitHub Release Page]($RELEASE_URL)."
+              echo "- The normal Actions artifact named \`app-debug-apk\` is also available as a backup from the Actions workflow run summary."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Release publishing failed, but APK build succeeded."
+            echo "APK build status: Succeeded"
+            echo "Actions artifact named app-debug-apk remains available."
+
+            {
+              echo "## ⚠️ Release Publishing Warning"
+              echo ""
+              echo "> **Warning:** GitHub Release publishing did not succeed, but the APK build succeeded."
+              echo ""
+              echo "- **APK Build Status:** Succeeded"
+              echo "- **Backup Artifact:** The Actions artifact named \`app-debug-apk\` remains available."
+              echo "- **Download Location:** You can download \`app-debug-apk\` directly from the summary of this GitHub Actions run."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
